@@ -1,0 +1,18 @@
+version: '3.9'
+
+services:
+  asset-service-mock:
+    build:
+      context: ./
+      dockerfile: ./dockerfile-dev
+    ports:
+      - "8070:80"  # TODO change port (check docker-compose.yml for used ports)
+    networks:
+      - localstack-net
+    volumes:
+      - ./:/opt/project
+
+networks:
+  localstack-net:
+    external:
+      name: localstack-net

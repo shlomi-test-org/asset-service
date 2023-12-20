@@ -1,0 +1,8 @@
+FROM python:3.8-slim-buster
+
+COPY ./requirements-mock.txt /requirements-mock.txt
+RUN pip install -r /requirements-mock.txt
+
+EXPOSE 80
+
+CMD ["uvicorn", "opt.project.app.main:app", "--reload", "--host", "0.0.0.0", "--port", "80"]

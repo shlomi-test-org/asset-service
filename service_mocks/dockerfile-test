@@ -1,0 +1,15 @@
+FROM python:3.8
+
+LABEL org.opencontainers.image.source https://github.com/jitsecurity/asset-service
+
+COPY ./service_mocks/requirements-mock.txt /requirements-mock.txt
+RUN --mount=type=ssh mkdir -p /root/.ssh/ &&  \
+    ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts &&  \
+    pip install -r /requirements-mock.txt
+
+EXPOSE 80
+COPY ./service_mocks/app /app
+COPY ./src/asset_service/models.py /app/models.py
+COPY ./src/lib/ /src/lib/
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]

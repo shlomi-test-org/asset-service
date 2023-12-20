@@ -1,0 +1,6 @@
+fastapi==0.65.2
+uvicorn==0.18.1
+requests==2.31.0
+pydantic==1.8.2
+
+jit-utils[logger,requests,lambda_decorators,service_discovery,jit_aws_clients,event_models] @ git+ssh://git@github.com/jitsecurity/jit-utils.git@4.4.1#egg=jit-utils

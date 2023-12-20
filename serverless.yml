@@ -1,0 +1,1127 @@
+service: asset-service
+
+frameworkVersion: "3"
+
+package:
+  exclude:
+    - "./**"
+  include:
+    - "src/**"
+
+provider:
+  tags:
+    lumigo:auto-trace: true
+    environment: ${env:ENV_NAME, self:provider.stage}
+    LUMIGO_TAG: ${self:service}
+  name: aws
+  deploymentBucket:
+    blockPublicAccess: true
+    serverSideEncryption: AES256
+  timeout: 30
+  stage: ${opt:stage,'local'}
+  runtime: python3.8
+  region: us-east-1
+  apiGateway:
+    shouldStartNameWithService: true
+  eventBridge:
+    useCloudFormation: true
+  lambdaHashingVersion: 20201221
+  environment:
+    API_HOST: ${self:custom.api_host}
+    ENV_NAME: ${env:ENV_NAME, self:provider.stage}
+    DEPLOYMENT_STAGE: ${self:provider.stage}
+    testHost: http://localhost
+    SERVICE_NAME: ${self:service}
+    AWS_REGION_NAME: us-east-1
+    DYNAMODB_ISOLATION_ROLE: ${ssm:/${self:custom.env_name}/infra/iam-role/dynamodb-assumed-iam-role}
+    ASSETS_TO_DELETE_QUEUE: "AssetsToDeleteQueue"
+    ASSETS_TO_INSTALL_QUEUE: "AssetsToInstallQueue"
+    INITIALIZE_PLAN_QUEUE: "InitializePlanQueue"
+    SCORE_UPDATE_FOR_TENANT_QUEUE: "ScoreUpdateForTenantQueue"
+    SCORE_UPDATE_FOR_TENANT_QUEUE_DLQ: "ScoreUpdateForTenantQueueDLQ"
+    ASSETS_TABLE_NAME: "Assets"
+    LAUNCH_DARKLY_SDK_KEY: ${ssm:/${self:custom.env_name}/infra/launch-darkly/sdk-key, true}
+    GENERAL_ROLE_TO_ASSUME_ARN: ${ssm:/${self:custom.env_name}/infra/iam-role/general-tenant-isolation-iam-role}
+    AWS_ACCOUNT_ID: "${aws:accountId}"
+  logs:
+    restApi:
+      level: ERROR
+      roleManagedExternally: true # Role was already created in terraform
+      accessLogging: false # Do not log only access to APIs
+      fullExecutionData: true # Log request/response data
+  iamRoleStatements:
+    # This IAM-role (used by the warmup lambda) must be a global role, because the warmup lambda is being created automatically
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+      Resource:
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-create-asset
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-update-asset
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-update-multiple-assets
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-get-assets
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-get-count-for-all-asset-types
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-get-assets-by-key-attributes
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-get-asset-by-attributes
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-get-asset-by-id
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-count-covered-assets-by-attributes
+        - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${opt:stage}-delete-asset
+
+plugins: ${self:custom.plugins.${self:provider.stage}, self:custom.plugins.default}
+
+custom:
+  env_name: ${env:ENV_NAME, self:provider.stage}
+  api_host: ${ssm:/${self:custom.env_name}/infra/api/host, 'api.local.jitdev.io'}
+  private_subnets: ${ssm:/${self:custom.env_name}/infra/subnets/private_subnets/${self:custom.env_name}, ''}
+  base_role_arn: arn:aws:iam::${aws:accountId}:role
+  app_name:
+    prod: app-${self:provider.stage}
+    staging: app-${self:provider.stage}
+    dev: app-${self:provider.stage}
+    custom_env: app-${self:custom.env_name}-${self:provider.stage}
+  mongodb:
+    instance_name: "jit"
+    db_name: "jit"
+    assets_collection_name: "assets"
+    data_api_ssm_url: /${self:custom.env_name}/infra/mongodb/data-api/url
+    connection_string_ssm_url: /${self:custom.env_name}/infra/mongodb/jit/private-endpoint/connection-string
+  basePath: asset
+  documentation:
+    version: "1"
+    title: "Asset Service"
+    description: "API for the asset service"
+    termsOfService: https://jit.io
+    externalDocumentation:
+      url: https://docs.jit.io/docs
+      description: A link to the docs
+    servers:
+      url: https://${self:custom.api_host}/{basePath}
+      description: "The asset service API server"
+      variables:
+        basePath:
+          default: /asset
+    securitySchemes:
+      bearerAuth:
+        type: http
+        scheme: bearer
+        bearerFormat: JWT
+    security:
+      - bearerAuth: [ ]
+  plugins:
+    local:
+      - serverless-openapi-documenter
+      - serverless-localstack
+      - serverless-functions-base-path
+      - serverless-python-requirements
+      - serverless-manifest-plugin
+      - serverless-dotenv-plugin
+      - serverless-plugin-ifelse
+      - serverless-prune-plugin
+      - dynamo-data-transform
+    default:
+      - serverless-openapi-documenter
+      - serverless-functions-base-path
+      - serverless-python-requirements
+      - serverless-manifest-plugin
+      - serverless-dotenv-plugin
+      - serverless-domain-manager
+      - serverless-plugin-ifelse
+      - serverless-ssm-publish
+      - serverless-plugin-warmup
+      - serverless-iam-roles-per-function
+      - serverless-prune-plugin
+      - dynamo-data-transform
+      - serverless-plugin-scripts
+  scripts:
+      hooks:
+        'deploy:finalize': echo "refreshing mongo indexes..."; if [ "$STAGE" != "local" ] && [ "$STAGE" != "test" ]; then sls invoke --stage $STAGE -f create-mongo-collections-and-indexes --path ./mongo_configuration.yaml; fi; echo "Done mongo indexes refresh..."
+  serverlessIfElse:
+    - If: '"${self:provider.stage}" == "local" || "${self:provider.stage}" == "test"'
+      Exclude:
+        - functions.create-mirror-dynamo-to-mongo
+        - functions.create-mongo-collections-and-indexes
+        - functions.migrate-assets-to-mongo
+        - resources.Resources.MongoMirroringRole
+        - resources.Resources.MongoMirroringRoleAdjustUser
+        - resources.Resources.MongoCreateIndexesRole
+        - resources.Resources.IndexAdjustUser
+        - resources.Resources.MongoGetAssetsRole
+        - resources.Resources.MongoGetAssetsAdjustUser
+        - resources.Resources.MongoMigrationsRole
+        - resources.Resources.MigrationUser
+  localstack:
+    hostname:
+      local: http://localhost
+      test: ${self:provider.environment.testHost}
+      staging: remote
+    debug: true
+    stages:
+      - local
+      - test
+    host: ${self:custom.localstack.hostname.${self:provider.stage}, ''}
+    endpoints:
+      APIGateway: ${self:custom.localstack.host}:4566
+      DynamoDB: ${self:custom.localstack.host}:4566
+      Lambda: ${self:custom.localstack.host}:4566
+  pythonRequirements:
+    fileName: requirements.txt
+    dockerizePip: non-linux
+    dockerSsh: true
+  functionsBasePath: src/handlers
+  prune:
+    automatic: true
+    includeLayers: true
+    number: 3
+  dotenv:
+    path: .env/.${self:provider.stage}
+  customDomain:
+    type: rest
+    domainName: ${ssm:/${self:custom.env_name}/infra/api/host, 'api.local.jitdev.io'}
+    basePath: ${self:custom.basePath}
+    certificateName: ${ssm:/${self:custom.env_name}/infra/api/host, 'api.local.jitdev.io'}
+    stage: ${self:provider.stage}
+    endpointType: "edge"
+    securityPolicy: tls_1_2
+    createRoute53Record: true
+  ssmPublish:
+    enabled: true
+    params:
+      - path: /${self:custom.env_name}/service-discovery/${self:service}
+        value: "https://${ssm:/${self:custom.env_name}/infra/api/host, 'api.local.jitdev.io'}/${self:custom.basePath}"
+        secure: false
+  warmup:
+    workWeek:
+      enabled: false
+      events:
+        - schedule: cron(*/10 5-19 ? * SUN-FRI *)
+      concurrency: 3
+      prewarm: false
+      cleanFolder: false
+      role: IamRoleLambdaExecution
+      timeout: 20
+    weekEnd:
+      enabled: false
+      events:
+        - schedule: cron(*/30 5-13 ? * SAT *)
+      concurrency: 1
+      prewarm: false
+      cleanFolder: false
+      role: IamRoleLambdaExecution
+      timeout: 20
+
+anchors:
+  vpc: &vpc
+    securityGroupIds:
+      - ${ssm:/${self:custom.env_name}/infra/security_groups/lambda_sec_group, ''}
+    subnetIds:
+      ${self:custom.private_subnets}
+
+  mongoEnvironmentVars: &mongoEnvironmentVars
+    DB_INSTANCE_NAME: ${self:custom.mongodb.instance_name}
+    DB_NAME: ${self:custom.mongodb.db_name}
+    CONNECTION_STRING_SSM_URL: ${self:custom.mongodb.connection_string_ssm_url}
+    ASSETS_COLLECTION_NAME: ${self:custom.mongodb.assets_collection_name}
+    MONGO_API_URL_PATH: ${self:custom.mongodb.data_api_ssm_url}
+
+  warmup: &warmup
+    workWeek:
+      enabled:
+        - staging
+        - prod
+    weekEnd:
+      enabled:
+        - staging
+        - prod
+
+  iamRoles:
+    generalTenantIsolationRole: &generalTenantIsolationRole
+      Effect: Allow
+      Action: sts:AssumeRole
+      Resource: ${ssm:/${self:custom.env_name}/infra/iam-role/general-tenant-isolation-iam-role}
+    getDataApiUrlSSM: &getDataApiUrlSSM
+      Effect: Allow
+      Action: ssm:GetParameter
+      Resource: arn:aws:ssm:${aws:region}:${aws:accountId}:parameter${self:custom.mongodb.data_api_ssm_url}
+    getMongoConnectionStringSSM: &getMongoConnectionStringSSM
+      Effect: Allow
+      Action: ssm:GetParameter
+      Resource: arn:aws:ssm:${aws:region}:${aws:accountId}:parameter${self:custom.mongodb.connection_string_ssm_url}
+    generateInternalToken: &generateInternalToken
+      Effect: Allow
+      Action: execute-api:Invoke
+      Resource: arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${opt:stage}/POST/token/internal
+    getServiceUrlFromSSM: &getServiceUrlFromSSM
+      Effect: Allow
+      Action: ssm:GetParameter
+      Resource: arn:aws:ssm:${aws:region}:${aws:accountId}:parameter/*/service-discovery/*-service
+
+  mongo:
+    commonUserProperties: &commonUserProperties
+      AWSIAMType: ROLE
+      ProjectId: ${ssm:/${self:custom.env_name}/infra/mongodb/project-id, ''}
+      Profile: ${ssm:/${self:custom.env_name}/infra/mongodb/organization-id, ''}
+      DatabaseName: "$external"
+
+    commonRoleProperties: &commonRoleProperties
+      ProjectId: ${ssm:/${self:custom.env_name}/infra/mongodb/project-id, ''}
+      Profile: ${ssm:/${self:custom.env_name}/infra/mongodb/organization-id, ''}
+
+    actions:
+      assets:
+        updateAssetsMongoAction: &updateAssetsMongoAction
+          Action: UPDATE
+          Resources:
+            - Collection: ${self:custom.mongodb.assets_collection_name}
+              DB: ${self:custom.mongodb.db_name}
+
+        insertAssetsMongoAction: &insertAssetsMongoAction
+          Action: INSERT
+          Resources:
+            - Collection: ${self:custom.mongodb.assets_collection_name}
+              DB: ${self:custom.mongodb.db_name}
+
+        findAssetsMongoAction: &findAssetsMongoAction
+          Action: FIND
+          Resources:
+            - Collection: ${self:custom.mongodb.assets_collection_name}
+              DB: ${self:custom.mongodb.db_name}
+
+        removeAssetsMongoAction: &removeAssetsMongoAction
+          Action: REMOVE
+          Resources:
+            - Collection: ${self:custom.mongodb.assets_collection_name}
+              DB: ${self:custom.mongodb.db_name}
+
+functions:
+  migrate-assets-to-mongo:
+    handler: mongo_managment.migrate_assets_to_mongo.handler
+    memorySize: 10240
+    description: Temp function to migrate assets to mongo
+    timeout: 900
+    vpc: *vpc
+    environment: *mongoEnvironmentVars
+    iamRoleStatementsName: asset-service-migrate-assets-to-mongo-role
+    iamRoleStatements:
+      - <<: *getMongoConnectionStringSSM
+      - Effect: Allow
+        Action: dynamodb:Scan
+        Resource:
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets/index/*
+
+  mirror-dynamo-to-mongo:
+    handler: mirror_dynamo_to_mongo.handler
+    memorySize: 512
+    description: Listen to Dynamo stream and write/update/delete asset from/to Mongo
+    timeout: 300
+    vpc: *vpc
+    environment: *mongoEnvironmentVars
+    events:
+      - stream:
+          type: dynamodb
+          arn:
+            Fn::GetAtt:
+              - Assets
+              - StreamArn
+          maximumRetryAttempts: 6
+          startingPosition: LATEST
+          filterPatterns:
+            - eventName: [ INSERT, MODIFY, REMOVE ]
+    iamRoleStatementsName: asset-service-mirror-dynamo-to-mongo
+    iamRoleStatements:
+      - <<: *generateInternalToken
+      - <<: *getMongoConnectionStringSSM
+
+  create-mongo-collections-and-indexes:
+    handler: mongo_management.create_mongo_indexes.handler
+    memorySize: 512
+    description: Creates mongo resources and events
+    timeout: 120
+    vpc: *vpc
+    environment: *mongoEnvironmentVars
+    iamRoleStatementsName: asset-service-create-indexes-role
+    iamRoleStatements:
+      - <<: *getMongoConnectionStringSSM
+
+  create-asset:
+    handler: create_asset.handler
+    memorySize: 512
+    timeout: 45
+    description: creates new assets for tenant
+    events:
+      - http:
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: post
+          path: /
+          responseModel:
+            200: file:src/lib/response_models/create_asset_response.json
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-create-asset-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sqs:GetQueueUrl
+          - sqs:SendMessage
+        Resource: arn:aws:sqs:${aws:region}:${aws:accountId}:${self:provider.environment.INITIALIZE_PLAN_QUEUE}
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/dynamodb-assumed-iam-role}
+      - Effect: Allow
+        Action: events:PutEvents
+        Resource:
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/asset-events
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/websocket-push
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/trigger-execution
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/installations
+          - ${ssm:/${self:custom.env_name}/infra/event-bus/analytics, 'default'}
+      - Effect: Allow
+        Action: execute-api:Invoke
+        Resource:
+          # authentication-service
+          - arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${opt:stage}/POST/token/internal
+          # tenant-service
+          - arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${opt:stage}/PATCH/installation
+
+  create-asset-sqs-trigger:
+    handler: create_asset.internal_handler
+    memorySize: 512
+    timeout: 45
+    description: creates new assets for tenant
+    events:
+      - sqs:
+          batchSize: 1
+          maximumBatchingWindow: 0
+          arn: arn:aws:sqs:${aws:region}:${aws:accountId}:${self:provider.environment.ASSETS_TO_INSTALL_QUEUE}
+    iamRoleStatementsName: asset-service-create-asset-sqs-trigger-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sqs:GetQueueUrl
+          - sqs:ReceiveMessage
+        Resource: arn:aws:sqs:${aws:region}:${aws:accountId}:${self:provider.environment.ASSETS_TO_INSTALL_QUEUE}
+      - Effect: Allow
+        Action:
+          - sqs:GetQueueUrl
+          - sqs:SendMessage
+        Resource: arn:aws:sqs:${aws:region}:${aws:accountId}:${self:provider.environment.INITIALIZE_PLAN_QUEUE}
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:BatchWriteItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+        Resource:
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets/index/*
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/dynamodb-assumed-iam-role}
+      - Effect: Allow
+        Action: events:PutEvents
+        Resource:
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/asset-events
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/websocket-push
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/trigger-execution
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/installations
+          - ${ssm:/${self:custom.env_name}/infra/event-bus/analytics, 'default'}
+      - Effect: Allow
+        Action: execute-api:Invoke
+        Resource:
+          # authentication-service
+          - arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${opt:stage}/POST/token/internal
+          # tenant-service
+          - arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${opt:stage}/PATCH/installation
+
+  update-asset:
+    handler: update_asset.handler
+    memorySize: 512
+    description: update asset for tenant
+    events:
+      - http:
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: patch
+          path: /asset/{asset_id}
+          responseModel:
+            200: file:src/lib/response_models/asset.json
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-update-asset-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/dynamodb-assumed-iam-role}
+      - Effect: Allow
+        Action: events:PutEvents
+        Resource:
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/asset-events
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/websocket-push
+      - Effect: Allow
+        Action: execute-api:Invoke
+        Resource:
+          # authentication-service
+          - arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${opt:stage}/POST/token/internal
+
+  update-multiple-assets:
+    handler: update_asset.update_multiple_assets_handler
+    memorySize: 512
+    description: update multiple assets
+    events:
+      - http:
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: post # it should be patch, but it fixes a cors issue of patch method: https://github.com/serverless/serverless/issues/6190
+          path: /assets
+          responseModel:
+            200: file:src/lib/response_models/asset.json
+          cors: true
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-update-multiple-assets-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/dynamodb-assumed-iam-role}
+      - Effect: Allow
+        Action: events:PutEvents
+        Resource:
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/asset-events
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/websocket-push
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/trigger-execution
+
+  get-assets:
+    handler: get_asset.get_all_by_tenant
+    memorySize: 512
+    description: Get assets for tenant id
+    vpc: *vpc
+    environment: *mongoEnvironmentVars
+    events:
+      - http:
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: get
+          path: /
+          responseModel:
+            200: file:src/lib/response_models/asset.json
+          cors: true
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-get-assets-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/general-tenant-isolation-iam-role}
+      - <<: *getMongoConnectionStringSSM
+      - <<: *getDataApiUrlSSM
+
+  get-count-for-all-asset-types:
+    handler: get_asset.get_counts_for_all_asset_types
+    memorySize: 512
+    description: Get list of asset types and their covered and not covered counts for tenant id
+    events:
+      - http:
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: get
+          path: /count
+          responseModel:
+            200: file:src/lib/response_models/asset.json
+          cors: true
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-get-count-for-all-asset-types-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/general-tenant-isolation-iam-role}
+
+  get-assets-by-key-attributes:
+    handler: get_asset.get_assets_by_key_attributes
+    memorySize: 512
+    description: Get assets for tenant id by key attributes
+    events:
+      - http: &get-assets-by-key-attributes
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: get
+          path: /type/{asset_type}/vendor/{vendor}/owner/{owner}
+          responseModel:
+            200: file:src/lib/response_models/asset.json
+          cors: true
+      - http:
+          <<: *get-assets-by-key-attributes
+          path: /type/{asset_type}/vendor/{vendor}
+      - http:
+          <<: *get-assets-by-key-attributes
+          path: /type/{asset_type}
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-get-assets-by-key-attributes-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/general-tenant-isolation-iam-role}
+
+  get-asset-by-id:
+    handler: get_asset.get_by_id
+    memorySize: 512
+    description: Get a single asset by tenant_id and asset_id
+    events:
+      - http:
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: get
+          path: /asset/{asset_id}
+          responseModel:
+            200: file:src/lib/response_models/asset.json
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-get-asset-by-id-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/general-tenant-isolation-iam-role}
+
+  get-asset-by-attributes:
+    handler: get_asset.get_by_key_attributes
+    memorySize: 256
+    description: Get single asset by tenant_id, asset_type, vendor, owner, asset_name
+    events:
+      - http:
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: get
+          path: /type/{asset_type}/vendor/{vendor}/owner/{owner}/name/{asset_name}
+          responseModel:
+            200: file:src/lib/response_models/asset.json
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-get-asset-by-attributes-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/general-tenant-isolation-iam-role}
+
+  count-covered-assets-by-attributes:
+    handler: get_asset.count_covered_items
+    memorySize: 128
+    description: Count covered & non covered assets by tenant_id, asset_type, vendor, owner, asset_name
+    events:
+      - http: &asset-key-attributes
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: get
+          path: /type/{asset_type}/vendor/{vendor}/owner/{owner}/count
+          responseModel:
+            200: file:src/lib/response_models/asset.json
+          cors: true
+      - http:
+          <<: *asset-key-attributes
+          path: /type/{asset_type}/vendor/{vendor}/count
+      - http:
+          <<: *asset-key-attributes
+          path: /type/{asset_type}/count
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-count-covered-assets-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/general-tenant-isolation-iam-role}
+
+  delete-asset-sqs-trigger:
+    handler: delete_assets.internal_handler
+    memorySize: 128
+    timeout: 45
+    description: Delete assets
+    events:
+      - sqs:
+          batchSize: 1
+          maximumBatchingWindow: 0
+          arn: arn:aws:sqs:${aws:region}:${aws:accountId}:AssetsToDeleteQueue
+    iamRoleStatementsName: asset-service-delete-asset-sqs-trigger-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sqs:GetQueueUrl
+          - sqs:ReceiveMessage
+        Resource: arn:aws:sqs:${aws:region}:${aws:accountId}:AssetsToDeleteQueue
+      - Effect: Allow
+        Action: dynamodb:UpdateItem
+        Resource:
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets/index/*
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/dynamodb-assumed-iam-role}
+      - Effect: Allow
+        Action: events:PutEvents
+        Resource:
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/asset-events
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/websocket-push
+
+  delete-asset:
+    handler: delete_assets.handler
+    memorySize: 128
+    timeout: 45
+    description: Delete assets
+    events:
+      - http:
+          authorizer:
+            arn: ${ssm:/${self:custom.env_name}/infra/lambda/jwt-authorizer}
+            type: request
+            resultTtlInSeconds: 0 # if 0 caching is disabled / max value is 3600 for caching results
+          method: post
+          path: /delete
+          responseModel:
+            204:
+    warmup: *warmup
+    iamRoleStatementsName: asset-service-delete-asset-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sts:AssumeRole
+        Resource:
+          - ${ssm:/${self:custom.env_name}/infra/iam-role/dynamodb-assumed-iam-role}
+      - Effect: Allow
+        Action: events:PutEvents
+        Resource:
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/asset-events
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/websocket-push
+
+  delete-tenant-data:
+    handler: delete_tenant_data.handler
+    memorySize: 512
+    description: removes all tenant data from db
+    events:
+      - eventBridge:
+          eventBus: ${ssm:/${self:custom.env_name}/infra/event-bus/tenant-deletion, 'default'}
+          pattern:
+            source:
+              - "tenant-service"
+              - "backoffice-service"
+            detail-type:
+              - "delete-tenant-data"
+    iamRoleStatementsName: asset-service-delete-tenant-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:DeleteItem
+          - dynamodb:Query
+          - dynamodb:BatchWriteItem
+        Resource:
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets
+
+  monitor-delete-asset:
+    handler: streams.monitor_delete_asset
+    memorySize: 128
+    description: Publish an event on inactive asset
+    events:
+      - stream:
+          type: dynamodb
+          arn:
+            Fn::GetAtt:
+              - Assets
+              - StreamArn
+          batchSize: 1
+          filterPatterns:
+            - eventName: [MODIFY]
+              dynamodb:
+                OldImage:
+                  is_covered:
+                    BOOL: [true]
+                NewImage:
+                  is_covered:
+                    BOOL: [false]
+            - eventName: [MODIFY]
+              dynamodb:
+                OldImage:
+                  is_active:
+                    BOOL: [true]
+                NewImage:
+                  is_active:
+                    BOOL: [false]
+    iamRoleStatementsName: asset-service-monitor-delete-asset-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:DescribeStream
+          - dynamodb:GetRecords
+          - dynamodb:GetShardIterator
+          - dynamodb:ListStreams
+        Resource:
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets
+      - Effect: Allow
+        Action: events:PutEvents
+        Resource: arn:aws:events:${aws:region}:${aws:accountId}:event-bus/asset-events
+
+  handle-team-change-event:
+    handler: handle_team_change_event.handle_team_change_event
+    memorySize: 128
+    timeout: 45
+    description: Handle team change events
+    events:
+      - eventBridge:
+          eventBus: ${ssm:/${self:custom.env_name}/infra/event-bus/teams, 'default'}
+          pattern:
+            source:
+              - "teams"
+            detail-type:
+              - "team-asset-updated"
+    iamRoleStatementsName: handle-team-change-event-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:UpdateItem
+          - dynamodb:Query
+        Resource:
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets/index/*
+      - Effect: Allow
+        Action: events:PutEvents
+        Resource:
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/asset-events
+
+  handle-plan-item-status-events:
+    handler: plan_item_status_updates.handle_plan_item_status_events
+    events:
+      - eventBridge:
+          eventBus: ${ssm:/${self:custom.env_name}/infra/event-bus/plan-updates, 'default'}
+          pattern:
+            source:
+              - "plan-service"
+            detail-type:
+              - "plan-statuses-updates"
+    iamRoleStatementsName: asset-service-handle-plan-item-status-events-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sqs:GetQueueUrl
+          - sqs:SendMessage
+        Resource: arn:aws:sqs:${aws:region}:${aws:accountId}:${self:provider.environment.SCORE_UPDATE_FOR_TENANT_QUEUE}
+
+  update-asset-scores-for-tenant:
+    handler: plan_item_status_updates.update_asset_scores_for_tenant
+    events:
+      - sqs:
+          batchSize: 1
+          maximumBatchingWindow: 0
+          arn: arn:aws:sqs:${aws:region}:${aws:accountId}:${self:provider.environment.SCORE_UPDATE_FOR_TENANT_QUEUE}
+    destinations:
+      onFailure: arn:aws:sqs:${aws:region}:${aws:accountId}:${self:provider.environment.SCORE_UPDATE_FOR_TENANT_QUEUE_DLQ}
+    iamRoleStatementsName: asset-service-update-asset-scores-for-tenant-role
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - sqs:SendMessage
+          - sqs:GetQueueUrl
+        Resource:
+          - arn:aws:sqs:${aws:region}:${aws:accountId}:${self:provider.environment.SCORE_UPDATE_FOR_TENANT_QUEUE_DLQ}
+      - Effect: Allow
+        Action: execute-api:Invoke
+        Resource:
+          # authentication-service
+          - arn:aws:execute-api:${aws:region}:${aws:accountId}:*/${opt:stage}/POST/token/internal
+      - Effect: Allow
+        Action:
+          - dynamodb:UpdateItem
+          - dynamodb:GetItem
+        Resource:
+          - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/Assets
+      - Effect: Allow
+        Action: events:PutEvents
+        Resource:
+          - arn:aws:events:${aws:region}:${aws:accountId}:event-bus/asset-events
+
+resources:
+  Resources:
+    Assets:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Assets
+        BillingMode: PAY_PER_REQUEST
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+          - AttributeName: GSI2PK
+            AttributeType: S
+          - AttributeName: GSI2SK
+            AttributeType: S
+          - AttributeName: GSI3PK
+            AttributeType: S
+          - AttributeName: GSI3SK
+            AttributeType: N
+          - AttributeName: GSI4PK
+            AttributeType: S
+          - AttributeName: GSI4SK
+            AttributeType: S
+          - AttributeName: LSI1SK
+            AttributeType: N
+          - AttributeName: LSI2SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        GlobalSecondaryIndexes:
+          - IndexName: GSI2
+            KeySchema:
+              - AttributeName: GSI2PK
+                KeyType: HASH
+              - AttributeName: GSI2SK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: "ALL"
+          - IndexName: GSI3
+            KeySchema:
+              - AttributeName: GSI3PK
+                KeyType: HASH
+              - AttributeName: GSI3SK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: "ALL"
+          - IndexName: GSI4
+            KeySchema:
+              - AttributeName: GSI4PK
+                KeyType: HASH
+              - AttributeName: GSI4SK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: "ALL"
+        LocalSecondaryIndexes:
+          - IndexName: LSI1
+            KeySchema:
+              - AttributeName: PK
+                KeyType: HASH
+              - AttributeName: LSI1SK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: "ALL"
+          - IndexName: LSI2
+            KeySchema:
+              - AttributeName: PK
+                KeyType: HASH
+              - AttributeName: LSI2SK
+                KeyType: RANGE
+            Projection:
+              ProjectionType: "ALL"
+    DynamoAssetsAlarmConsumedWriteCapacityUnits:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmDescription: High ConsumedWriteCapacityUnits in DynamoDB Assets table
+        Namespace: AWS/DynamoDB
+        MetricName: ConsumedWriteCapacityUnits
+        Statistic: Sum
+        Threshold: 1
+        ComparisonOperator: GreaterThanThreshold
+        EvaluationPeriods: 1
+        Period: 60
+        Dimensions:
+          - Name: "TableName"
+            Value:
+              Fn::GetAtt: [Assets, Arn]
+        AlarmActions:
+          - Ref: TopicCloudwatchAssetsAlarm
+    TopicCloudwatchAssetsAlarm:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ${self:service}-${self:provider.stage}-assets-topic-cloudwatch-alarm
+    TopicCloudwatchAssetsAlarmSubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        Endpoint: aws-alerts@jit.io
+        Protocol: email
+        TopicArn:
+          Ref: TopicCloudwatchAssetsAlarm
+
+    # Required for lambdas with custom authorizers
+    # if you reject an authorization request, you don't have the ability to specify the CORS headers in your response.
+    # This can make it difficult for the client browser to understand the response.
+    # Source: https://www.serverless.com/blog/cors-api-gateway-survival-guide/
+    GatewayResponseDefault4XX:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: "ApiGatewayRestApi"
+    GatewayResponseDefault5XX:
+      Type: "AWS::ApiGateway::GatewayResponse"
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+        ResponseType: DEFAULT_5XX
+        RestApiId:
+          Ref: "ApiGatewayRestApi"
+    AssetsToDeleteQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:provider.environment.ASSETS_TO_DELETE_QUEUE}
+        VisibilityTimeout: "45"
+    AssetsToInstallQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:provider.environment.ASSETS_TO_INSTALL_QUEUE}
+        VisibilityTimeout: "45"
+    ScoreUpdateForTenantQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:provider.environment.SCORE_UPDATE_FOR_TENANT_QUEUE}
+        VisibilityTimeout: "45"
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - ScoreUpdateForTenantQueueDLQ
+              - Arn
+          maxReceiveCount: 3
+    ScoreUpdateForTenantQueueDLQ:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        QueueName: ${self:provider.environment.SCORE_UPDATE_FOR_TENANT_QUEUE_DLQ}
+        VisibilityTimeout: "45"
+
+
+    MongoMirroringRole:
+      Type: MongoDB::Atlas::CustomDBRole
+      Properties:
+        <<: *commonRoleProperties
+        RoleName: asset-service-mirror-dynamo-to-mongo
+        Actions:
+          - <<: *insertAssetsMongoAction
+          - <<: *updateAssetsMongoAction
+          - <<: *removeAssetsMongoAction
+    MongoMirroringRoleAdjustUser:
+      Type: MongoDB::Atlas::DatabaseUser
+      Properties:
+        <<: *commonUserProperties
+        Username: ${self:custom.base_role_arn}/asset-service-mirror-dynamo-to-mongo
+        Roles:
+          - RoleName: asset-service-mirror-dynamo-to-mongo
+            DatabaseName: "admin"
+      DependsOn: [ MongoMirroringRole ]
+
+    MongoCreateIndexesRole:
+      Type: MongoDB::Atlas::CustomDBRole
+      Properties:
+        <<: *commonRoleProperties
+        RoleName: asset-service-create-indexes-role
+        Actions:
+          - Action: CREATE_COLLECTION
+            Resources:
+              - Collection: ${self:custom.mongodb.assets_collection_name}
+                DB: ${self:custom.mongodb.db_name}
+          - Action: DROP_INDEX
+            Resources:
+              - Collection: ${self:custom.mongodb.assets_collection_name}
+                DB: ${self:custom.mongodb.db_name}
+          - Action: CREATE_INDEX
+            Resources:
+              - Collection: ${self:custom.mongodb.assets_collection_name}
+                DB: ${self:custom.mongodb.db_name}
+          - Action: LIST_INDEXES
+            Resources:
+              - Collection: ${self:custom.mongodb.assets_collection_name}
+                DB: ${self:custom.mongodb.db_name}
+    IndexAdjustUser:
+      Type: MongoDB::Atlas::DatabaseUser
+      Properties:
+        <<: *commonUserProperties
+        Username: ${self:custom.base_role_arn}/asset-service-create-indexes-role
+        Roles:
+          - RoleName: asset-service-create-indexes-role
+            DatabaseName: "admin"
+      DependsOn: [ MongoCreateIndexesRole ]
+
+    MongoGetAssetsRole:
+      Type: MongoDB::Atlas::CustomDBRole
+      Properties:
+        <<: *commonRoleProperties
+        RoleName: asset-service-get-assets-role
+        Actions:
+          - <<: *findAssetsMongoAction
+    MongoGetAssetsAdjustUser:
+      Type: MongoDB::Atlas::DatabaseUser
+      Properties:
+        <<: *commonUserProperties
+        Username: ${self:custom.base_role_arn}/asset-service-get-assets-role
+        Roles:
+          - RoleName: asset-service-get-assets-role
+            DatabaseName: "admin"
+      DependsOn: [ MongoGetAssetsRole ]
+    MongoMigrationsRole:
+      Type: MongoDB::Atlas::CustomDBRole
+      Properties:
+        <<: *commonRoleProperties
+        RoleName: asset-service-migrate-assets-to-mongo-role
+        Actions:
+          - Action: CREATE_COLLECTION
+            Resources:
+              - Collection: ${self:custom.mongodb.assets_collection_name}
+                DB: ${self:custom.mongodb.db_name}
+          - Action: FIND
+            Resources:
+              - Collection: ${self:custom.mongodb.assets_collection_name}
+                DB: ${self:custom.mongodb.db_name}
+          - Action: INSERT
+            Resources:
+              - Collection: ${self:custom.mongodb.assets_collection_name}
+                DB: ${self:custom.mongodb.db_name}
+          - Action: REMOVE
+            Resources:
+              - Collection: ${self:custom.mongodb.assets_collection_name}
+                DB: ${self:custom.mongodb.db_name}
+          - Action: UPDATE
+            Resources:
+              - Collection: ${self:custom.mongodb.assets_collection_name}
+                DB: ${self:custom.mongodb.db_name}
+    MigrationUser:
+      Type: MongoDB::Atlas::DatabaseUser
+      Properties:
+        <<: *commonUserProperties
+        Username: ${self:custom.base_role_arn}/asset-service-migrate-assets-to-mongo-role
+        Roles:
+          - RoleName: asset-service-migrate-assets-to-mongo-role
+            DatabaseName: "admin"
+      DependsOn: [ MongoMigrationsRole ]
