@@ -1,0 +1,31 @@
+containers:
+  - name: roadie-broker
+    image: roadiehq/broker:kubernetes
+    imagePullPolicy: Always
+    volumeMounts:
+      - name: config-accept
+        mountPath: /home/node/custom-accept.json
+        subPath: custom-accept.json
+        readOnly: true
+    envFrom:
+      - secretRef:
+          name: roadie
+    env:
+      - name: BROKER_SERVER_URL
+        value: https://papayaglobal.broker.roadie.so
+      - name: CA_CERTS
+        value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      - name: NODE_EXTRA_CA_CERTS
+        value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      - name: LOG_LEVEL
+        value: debug
+      - name: LOG_ENABLE_BODY
+        value: "false"
+      - name: ACCEPT
+        value: /home/node/custom-accept.json
+      - name: ARGOCD_URL
+        value: http://argocd-server.argocd
+      - name: BROKER_TOKEN
+        value: payroll-int
+ports:
+  - containerPort: 8000
