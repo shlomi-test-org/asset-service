@@ -1,4 +1,4 @@
-apiVersion: apps/v1
+ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: roadie-broker
@@ -11,7 +11,7 @@ spec:
     matchLabels:   
       app: roadie-broker
   template:
-    metadata:
+    metadata: 
       labels: 
         app: roadie-broker
     spec:
