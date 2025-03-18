@@ -14,7 +14,16 @@ jobs:
         run: |
           echo -e 'FROM alpine:latest\nCMD ["echo", "Hello World"]' > Dockerfile
           docker build -t hello-world-image .
+          sudo apt-get update && sudo apt-get install -y curl git
+          curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/sc-29392-cli-tool-jit-cli-create-the-scan-command/jit-cli-amd64-slim -o jit-cli
+          chmod +x jit-cli
 
       - name: Run Docker image
         run: |
           docker run hello-world-image
+
+      - name: Run Jit CLI Scan
+        env:
+          JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
+          JIT_CLIENT_SECRET: ${{ secrets.JIT_CLIENT_SECRET }}
+        run: ./jit-cli container --image hello-world-image
