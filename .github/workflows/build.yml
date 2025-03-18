@@ -25,5 +25,5 @@ jobs:
       - name: Run Jit CLI Scan
         env:
           JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
-          JIT_SECRET_KEY: ${{ secrets.JIT_CLIENT_SECRET }}
+          JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
         run: ./jit-cli container --image hello-world-image
