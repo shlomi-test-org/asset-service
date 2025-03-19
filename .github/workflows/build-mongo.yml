@@ -1,0 +1,25 @@
+
+name: Docker Mongo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          sudo apt-get update && sudo apt-get install -y curl git
+          curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/sc-29437-test-our-solution-on-various-machines/jit-cli-amd64-slim -o jit-cli
+          chmod +x jit-cli
+
+      - name: Run Jit CLI Scan
+        env:
+          JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
+          JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
+          ENV_NAME: bandit
+        run: ./jit-cli container --image mongo --image-name docker.io/mongo --add-to-backlog
