@@ -12,7 +12,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          echo -e 'FROM ubuntu:18.04\nRUN apt-get update && apt-get install -y curl\nCMD ["echo", "Hello World"]' > Dockerfile
+          echo -e 'FROM alpine:3.10\nCMD ["echo", "Hello World"]' > Dockerfile
           docker build -t hello-world-image .
           sudo apt-get update && sudo apt-get install -y curl git
           curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/sc-29392-cli-tool-jit-cli-create-the-scan-command/jit-cli-amd64-slim -o jit-cli
