@@ -1,11 +1,6 @@
 # Dockerfile - Purposely Vulnerable Container
 FROM ubuntu:16.04
 
-# Install vulnerable and outdated packages
-RUN apt-get update && \
-    apt-get install -y wget=1.17.1-1ubuntu1 openssl=1.0.2g-1ubuntu4 bash=4.3-14ubuntu1 && \
-    rm -rf /var/lib/apt/lists/*
-
 # Install vulnerable Python dependencies
 RUN apt-get update && apt-get install -y python-pip && \
     pip install requests==2.19.1 flask==0.12.0 && \
