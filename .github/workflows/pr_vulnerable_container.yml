@@ -15,7 +15,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y curl git
           curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/latest/jit-cli-amd64-slim -o jit-cli
           chmod +x jit-cli
-          ./jit-cli container --image registry/hello-world-image --organization $GITHUB_REPOSITORY_OWNER --repo ${GITHUB_REPOSITORY#*/} --pull-request ${PR_NUMBER} --commit-id ${COMMIT_ID} --fail-on-findings --new-findings-only
+          ./jit-cli container --image registry/vulnerable-container --organization $GITHUB_REPOSITORY_OWNER --repo ${GITHUB_REPOSITORY#*/} --pull-request ${PR_NUMBER} --commit-id ${COMMIT_ID} --fail-on-findings --new-findings-only
         env:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           GITHUB_REPOSITORY: ${{ github.repository }}
