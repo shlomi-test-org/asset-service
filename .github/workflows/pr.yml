@@ -14,9 +14,17 @@ jobs:
           echo "Organization Name: $GITHUB_REPOSITORY_OWNER"
           echo "Repository Name: ${GITHUB_REPOSITORY#*/}"
           echo "PR Number: ${PR_NUMBER}"
-          echo "Commit SHA: ${BLA}"
+          echo "Commit SHA: ${COMMIT_ID}"
+          echo -e 'FROM alpine:3.10\nCMD ["echo", "Hello World"]' > Dockerfile
+          docker build -t hello-world-image .
+          sudo apt-get update && sudo apt-get install -y curl git
+          curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/main/jit-cli-amd64-slim -o jit-cli
+          chmod +x jit-cli
+          ./jit-cli container --image registry/hello-world-image --organization $GITHUB_REPOSITORY_OWNER --repo ${GITHUB_REPOSITORY#*/ --pull-request ${PR_NUMBER} --commit-id ${COMMIT_ID}
         env:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          BLA: ${{ github.event.pull_request.head.sha }}     
+          COMMIT_ID: ${{ github.event.pull_request.head.sha }}  
+          JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
+          JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}   
