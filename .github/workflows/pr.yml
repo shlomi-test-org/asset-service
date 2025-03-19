@@ -27,4 +27,5 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           COMMIT_ID: ${{ github.event.pull_request.head.sha }}  
           JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
-          JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}   
+          JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
+          ENV_NAME: bandit
