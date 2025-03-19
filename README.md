@@ -20,7 +20,7 @@ uvicorn main:app --reload
 Generate swagger and try the mock:
 http://127.0.0.1:8000/docs#/
 
-
+       
 ## Deploy locally and run tests
 Run service locally:
 ```bash
