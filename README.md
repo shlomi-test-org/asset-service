@@ -3,7 +3,7 @@
 
 ## Run the mock
 ### Using docker:
-Build and run the mock docker:
+Build and run the mock docker:   
 ```bash
 docker build -f ./service_mocks/dockerfile-dev -t fastapi ./service_mocks/
 docker run -d --name mock-service -p 8088:80 fastapi
