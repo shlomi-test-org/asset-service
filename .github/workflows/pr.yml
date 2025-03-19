@@ -19,4 +19,4 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          BLA: ${{ github.event.pull_request.head.sha }}
+          BLA: ${{ github.event.pull_request.head.sha }}     
