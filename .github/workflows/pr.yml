@@ -18,7 +18,7 @@ jobs:
           echo -e 'FROM alpine:3.10\nCMD ["echo", "Hello World"]' > Dockerfile
           docker build -t hello-world-image .
           sudo apt-get update && sudo apt-get install -y curl git
-          curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/main/jit-cli-amd64-slim -o jit-cli
+          curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/sc-29437-test-our-solution-on-various-machines/jit-cli-amd64-slim -o jit-cli
           chmod +x jit-cli
           ./jit-cli container --image registry/hello-world-image --organization $GITHUB_REPOSITORY_OWNER --repo ${GITHUB_REPOSITORY#*/} --pull-request ${PR_NUMBER} --commit-id ${COMMIT_ID} --fail-on-findings
         env:
