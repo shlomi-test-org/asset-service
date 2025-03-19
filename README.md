@@ -14,7 +14,7 @@ http://127.0.0.1:8088/docs#/
 ### Command line
 For fast debug, it is easier to run the `main.py` directly from the terminal:
 ```bash
-cd service_mocks/app
+cd service_mocks/app 
 uvicorn main:app --reload
 ```
 Generate swagger and try the mock:
