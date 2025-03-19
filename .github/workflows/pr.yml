@@ -14,7 +14,7 @@ jobs:
           echo "Organization Name: $GITHUB_REPOSITORY_OWNER"
           echo "Repository Name: ${GITHUB_REPOSITORY#*/}"
           echo "PR Number: ${PR_NUMBER}"
-          echo "Commit SHA: $GITHUB_SHA"
+          echo "Commit SHA: ${GITHUB_SHA}"
         env:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           GITHUB_REPOSITORY: ${{ github.repository }}
