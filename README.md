@@ -11,6 +11,13 @@ docker run -d --name mock-service -p 8088:80 fastapi
 Generate swagger and try the mock:
 http://127.0.0.1:8088/docs#/
 
+
+
+
+
+
+
+
 ### Command line
 For fast debug, it is easier to run the `main.py` directly from the terminal:
 ```bash
@@ -20,7 +27,7 @@ uvicorn main:app --reload
 Generate swagger and try the mock:
 http://127.0.0.1:8000/docs#/
 
-
+       
 ## Deploy locally and run tests
 Run service locally:
 ```bash
