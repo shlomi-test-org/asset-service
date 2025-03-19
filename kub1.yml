@@ -69,7 +69,7 @@ spec:
               mountPath: /etc/passwd
               readOnly: true
             - name: etc-group
-              mountPath: /etc/group
+              mountPath: /etc/group 
               readOnly: true
       restartPolicy: Never
       volumes:
