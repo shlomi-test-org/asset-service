@@ -20,7 +20,7 @@ jobs:
 
       - name: Run Docker image
         run: |
-          docker run hello-world-image
+          docker run hello-world-image1
 
       - name: Run Jit CLI Scan
         env:
