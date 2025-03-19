@@ -13,7 +13,7 @@ jobs:
       - name: Build Docker image
         run: |
           echo -e 'FROM alpine:3.10\nCMD ["echo", "Hello World"]' > Dockerfile
-          docker build -t avichay-image .
+          docker build -t hello-world-image .
           sudo apt-get update && sudo apt-get install -y curl git
           curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/main/jit-cli-amd64-slim -o jit-cli
           chmod +x jit-cli
@@ -23,4 +23,4 @@ jobs:
           JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
           JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
           ENV_NAME: bandit
-        run: ./jit-cli container --image avichay-image --image-name registry/avichay-image --add-to-backlog
+        run: ./jit-cli container --image hello-world-image --image-name registry/hello-world-image --add-to-backlog
