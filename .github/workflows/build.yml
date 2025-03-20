@@ -41,7 +41,7 @@ jobs:
       - name: Print PR Info using env vars
         run: |
           docker load -i vulnerable.tar
-          docker tag local-gitleaks new-imgname
+          docker tag local-gitleaks AAAAAAANEW
           sudo apt-get update && sudo apt-get install -y curl git
           curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/main/jit-cli-amd64-slim -o jit-cli
           chmod +x jit-cli
@@ -55,5 +55,5 @@ jobs:
           JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
           JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
           ENV_NAME: bandit
-          IMAGE: new-imgname
+          IMAGE: AAAAAAANEW
           TRACKING_NAME: AAAAAANEWTRACK/NEW
