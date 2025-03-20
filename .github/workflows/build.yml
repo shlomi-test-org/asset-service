@@ -14,13 +14,15 @@ jobs:
         run: |
           echo -e 'FROM alpine:3.10\nCMD ["echo", "Hello World"]' > Dockerfile
           docker build -t hello-world-image .
+          
           sudo apt-get update && sudo apt-get install -y curl git
-          curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/main/jit-cli-amd64-slim -o jit-cli
+          curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/sc-29437-bugsquashing-imrove-args/jit-cli-amd64-slim -o jit-cli
           chmod +x jit-cli
 
-      - name: Run Jit CLI Scan
+          ./jit-cli container --image $IMAGE --tracking-name $TRACKING_NAME --add-to-backlog
         env:
           JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
           JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
           ENV_NAME: bandit
-        run: ./jit-cli container --image hello-world-image --image-name registry/hello-world-image --add-to-backlog
+          IMAGE: hello-world-image
+          TRACKING_NAME: registry/jonathan
