@@ -28,3 +28,4 @@ jobs:
           ENV_NAME: bandit
           IMAGE: local-gitleaks
           TRACKING_NAME: test/gitleaks
+
