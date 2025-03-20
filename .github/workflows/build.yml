@@ -55,5 +55,5 @@ jobs:
           JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
           JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
           ENV_NAME: bandit
-          IMAGE: AAAAAAANEW
+          IMAGE: aaaaaaaanew
           TRACKING_NAME: AAAAAANEWTRACK/NEW
