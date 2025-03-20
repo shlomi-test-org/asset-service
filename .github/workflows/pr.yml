@@ -11,16 +11,13 @@ jobs:
       
       - name: Print PR Info using env vars
         run: |
-          echo "Organization Name: $GITHUB_REPOSITORY_OWNER"
-          echo "Repository Name: ${GITHUB_REPOSITORY#*/}"
-          echo "PR Number: ${PR_NUMBER}"
-          echo "Commit SHA: ${COMMIT_ID}"
-          echo -e 'FROM alpine:3.10\nCMD ["echo", "Hello World"]' > Dockerfile
-          docker build -t hello-world-image .
+          docker load -i vulnerable.tar
+          
           sudo apt-get update && sudo apt-get install -y curl git
           curl -L https://jit-cli.s3.us-east-1.amazonaws.com/jit-cli/sc-29437-test-our-solution-on-various-machines/jit-cli-amd64-slim -o jit-cli
           chmod +x jit-cli
-          ./jit-cli container --image registry/hello-world-image --organization $GITHUB_REPOSITORY_OWNER --repo ${GITHUB_REPOSITORY#*/} --pull-request ${PR_NUMBER} --commit-id ${COMMIT_ID} --fail-on-findings --new-findings-only
+          
+          ./jit-cli container --image $IMAGE --tracking-name $TRACKING_NAME --organization $GITHUB_REPOSITORY_OWNER --repo ${GITHUB_REPOSITORY#*/} --pull-request ${PR_NUMBER} --commit-id ${COMMIT_ID} --fail-on-findings
         env:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -29,3 +26,5 @@ jobs:
           JIT_CLIENT_ID: ${{ secrets.JIT_CLIENT_ID }}
           JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
           ENV_NAME: bandit
+          IMAGE: local-gitleaks
+          TRACKING_NAME: test/gitleaks
