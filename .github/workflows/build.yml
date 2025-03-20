@@ -56,4 +56,4 @@ jobs:
           JIT_SECRET_KEY: ${{ secrets.JIT_SECRET_KEY }}
           ENV_NAME: bandit
           IMAGE: local-gitleaks
-          TRACKING_NAME: test/gitleaks
+          TRACKING_NAME: AAAAAANEWTRACK/NEW
