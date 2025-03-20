@@ -12,7 +12,7 @@ spec:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
-              - matchExpressions:
+              - matchExpressions: 
                   - key: node-role.kubernetes.io/control-plane
                     operator: Exists
               - matchExpressions:
