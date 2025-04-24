@@ -19,7 +19,7 @@ jobs:
           
           ./jit-cli container --image $IMAGE --tracking-name $TRACKING_NAME --organization $GITHUB_REPOSITORY_OWNER --repo ${GITHUB_REPOSITORY#*/} --pull-request ${PR_NUMBER} --commit-id ${COMMIT_ID} --fail-on-findings
         env:
-          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }} 
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           COMMIT_ID: ${{ github.event.pull_request.head.sha }}  
