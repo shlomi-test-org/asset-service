@@ -1,0 +1,89 @@
+ apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: roadie-broker
+  namespace: default
+  labels:
+    app: roadie-broker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:   
+      app: roadie-broker
+  template:
+    metadata: 
+      labels: 
+        app: roadie-broker
+    spec:
+      containers:
+      - name: roadie-broker
+        image: roadiehq/broker:kubernetes
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: config-accept
+          mountPath: /home/node/custom-accept.json
+          subPath: custom-accept.json
+        readOnly: true
+        envFrom:
+        - secretRef:
+            name: roadie
+        env:
+        - name: BROKER_SERVER_URL
+          value: https://papayaglobal.broker.roadie.so
+        - name: CA_CERTS
+          value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        - name: NODE_EXTRA_CA_CERTS
+          value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        - name: LOG_LEVEL
+          value: debug
+        - name: LOG_ENABLE_BODY
+          value: "false"
+        - name: ACCEPT
+          value: /home/node/custom-accept.json
+        - name: ARGOCD_URL
+          value: http://argocd-server.argocd
+        - name: BROKER_TOKEN
+          value: payroll-int
+        - name: API_KEY
+          value: api_1234567890abcdefghijklmn
+        - name: DB_PASSWORD
+          value: SuperSecretPassword123!
+        - name: AUTH_TOKEN
+          value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ
+        - name: SECRET_KEY
+          value: 4F725B2E-21X8-42D9-AC12-9F72B356EABF
+        ports:
+        - containerPort: 8000
+      volumes:
+      - name: config-accept
+        configMap:
+          name: custom-accept
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-accept
+  namespace: default
+data:
+  custom-accept.json: |
+    {
+      "private": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzbmFrZSI6Im9pbCJ9.ZRm4ZmRtF4aFCVFuqN_5vml7BBO-XtR-w8S6c8vY9oo",
+        "client_secret": "52fdfc072182654f163f5f0f9a621d729566c74d10037c4d7bbb0407d1e2c649",
+        "api_key": "K2HGS8D-SJSHGSY-SJSH723-KSKSOEU3",
+        "aws_secret_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      }
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: roadie
+  namespace: default
+type: Opaque
+data:
+  # These are base64 encoded but still hardcoded in the manifest
+  ADMIN_PASSWORD: UGFzc3dvcmQxMjMh
+  GITLAB_TOKEN: Z2xwYXQtODlEMkVGOEYtOTY1NC00MTQ3LThCMkUtNkJGOTc3QThFMzJF
+  JENKINS_PASSWORD: YWRtaW5wYXNzd29yZA==
+  SLACK_WEBHOOK_URL: aHR0cHM6Ly9ob29rcy5zbGFjay5jb20vc2VydmljZXMvVDAwMDAwMDAwMC9CMTExMTExMTEvWFhYWFhYWFhYWFhYWFhYWFhYWFhY 
